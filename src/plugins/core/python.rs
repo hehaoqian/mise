@@ -230,40 +230,56 @@ impl PythonPlugin {
         ctx: &InstallContext,
         tv: &mut ToolVersion,
     ) -> eyre::Result<()> {
-        let precompiled_versions = self.fetch_precompiled_remote_versions().await?;
-        let precompile_info = precompiled_versions
-            .iter()
-            .rev()
-            .find(|(v, _, _)| &tv.version == v);
-        let (tag, filename) = match precompile_info {
-            Some((_, tag, filename)) => (tag, filename),
-            None => {
-                if cfg!(windows) || Settings::get().python.compile == Some(false) {
-                    if !cfg!(windows) {
-                        hint!(
-                            "python_compile",
-                            "To compile python from source, run",
-                            "mise settings python.compile=1"
+        // Check if URL already exists in lockfile platforms first
+        let platform_key = self.get_platform_key();
+        let url = if let Some(platform_info) = tv.lock_platforms.get(&platform_key)
+            && let Some(ref url) = platform_info.url
+        {
+            debug!(
+                "Using existing URL from lockfile for platform {}: {}",
+                platform_key, url
+            );
+            url.clone()
+        } else {
+            let precompiled_versions = self.fetch_precompiled_remote_versions().await?;
+            let precompile_info = precompiled_versions
+                .iter()
+                .rev()
+                .find(|(v, _, _)| &tv.version == v);
+            let (tag, filename) = match precompile_info {
+                Some((_, tag, filename)) => (tag, filename),
+                None => {
+                    if cfg!(windows) || Settings::get().python.compile == Some(false) {
+                        if !cfg!(windows) {
+                            hint!(
+                                "python_compile",
+                                "To compile python from source, run",
+                                "mise settings python.compile=1"
+                            );
+                        }
+                        let platform = python_precompiled_platform();
+                        bail!("no precompiled python found for {tv} on {platform}");
+                    }
+                    let available = precompiled_versions.iter().map(|(v, _, _)| v).collect_vec();
+                    if available.is_empty() {
+                        debug!("no precompiled python found for {}", tv.version);
+                    } else {
+                        warn!(
+                            "no precompiled python found for {}, force mise to use a precompiled version with `mise settings set python.compile false`",
+                            tv.version
                         );
                     }
-                    let platform = python_precompiled_platform();
-                    bail!("no precompiled python found for {tv} on {platform}");
-                }
-                let available = precompiled_versions.iter().map(|(v, _, _)| v).collect_vec();
-                if available.is_empty() {
-                    debug!("no precompiled python found for {}", tv.version);
-                } else {
-                    warn!(
-                        "no precompiled python found for {}, force mise to use a precompiled version with `mise settings set python.compile false`",
-                        tv.version
+                    trace!(
+                        "available precompiled versions: {}",
+                        available.into_iter().join(", ")
                     );
+                    return self.install_compiled(ctx, tv).await;
                 }
-                trace!(
-                    "available precompiled versions: {}",
-                    available.into_iter().join(", ")
-                );
-                return self.install_compiled(ctx, tv).await;
-            }
+            };
+
+            format!(
+                "https://github.com/astral-sh/python-build-standalone/releases/download/{tag}/{filename}"
+            )
         };
 
         if cfg!(unix) {
@@ -275,9 +291,6 @@ impl PythonPlugin {
             );
         }
 
-        let url = format!(
-            "https://github.com/astral-sh/python-build-standalone/releases/download/{tag}/{filename}"
-        );
         let filename = url.split('/').next_back().unwrap();
         let install = tv.install_path();
         let download = tv.download_path();
@@ -288,7 +301,6 @@ impl PythonPlugin {
             .await?;
 
         {
-            let platform_key = self.get_platform_key();
             let pi = tv.lock_platforms.entry(platform_key).or_default();
             pi.url = Some(url.clone());
         }
