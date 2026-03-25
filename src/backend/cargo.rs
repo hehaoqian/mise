@@ -15,6 +15,7 @@ use crate::backend::static_helpers::lookup_platform_key;
 use crate::cli::args::BackendArg;
 use crate::cmd::CmdLineRunner;
 use crate::config::{Config, Settings};
+use crate::env::GITHUB_TOKEN;
 use crate::file;
 use crate::http::HTTP_FETCH;
 use crate::install_context::InstallContext;
@@ -114,8 +115,8 @@ impl Backend for CargoBackend {
             cmd
         } else if self.is_binstall_enabled(&config, &tv).await {
             let mut cmd = CmdLineRunner::new("cargo-binstall").arg("-y");
-            if let Some(token) = crate::github::get_token("github.com") {
-                cmd = cmd.env("GITHUB_TOKEN", &token)
+            if let Some(token) = &*GITHUB_TOKEN {
+                cmd = cmd.env("GITHUB_TOKEN", token)
             }
             cmd.arg(install_arg)
         } else if Settings::get().cargo.binstall_only {

@@ -14,7 +14,7 @@ use crate::cli::args::BackendArg;
 use crate::cmd::CmdLineRunner;
 use crate::config::{Config, Settings};
 use crate::duration::DAILY;
-use crate::env::PATH_KEY;
+use crate::env::{self, PATH_KEY};
 use crate::git::{CloneOptions, Git};
 use crate::github::{self, GithubRelease};
 use crate::http::{HTTP, HTTP_FETCH};
@@ -736,7 +736,7 @@ impl RubyPlugin {
             tarball_path,
             owner,
             repo,
-            crate::github::get_token("github.com").as_deref(),
+            env::GITHUB_TOKEN.as_deref(),
             None, // Accept any workflow from repo
         )
         .await

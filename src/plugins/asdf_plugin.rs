@@ -9,7 +9,7 @@ use crate::timeout::run_with_timeout;
 use crate::ui::multi_progress_report::MultiProgressReport;
 use crate::ui::progress_report::SingleReport;
 use crate::ui::prompt;
-use crate::{dirs, exit, file, lock_file, registry};
+use crate::{dirs, env, exit, file, lock_file, registry};
 use async_trait::async_trait;
 use clap::Command;
 use console::style;
@@ -457,7 +457,7 @@ Plugins could support local directories in the future but for now a symlink is r
 
 fn build_script_man(name: &str, plugin_path: &Path) -> ScriptManager {
     let plugin_path_s = plugin_path.to_string_lossy().to_string();
-    let token = crate::github::get_token("github.com").unwrap_or_default();
+    let token = env::GITHUB_TOKEN.as_deref().unwrap_or("");
     ScriptManager::new(plugin_path.to_path_buf())
         .with_env("ASDF_PLUGIN_PATH", plugin_path_s.clone())
         .with_env("RTX_PLUGIN_PATH", plugin_path_s.clone())
@@ -466,7 +466,7 @@ fn build_script_man(name: &str, plugin_path: &Path) -> ScriptManager {
         .with_env("MISE_PLUGIN_NAME", name.to_string())
         .with_env("MISE_PLUGIN_PATH", plugin_path)
         .with_env("MISE_SHIMS_DIR", *dirs::SHIMS)
-        .with_env("GITHUB_TOKEN", &token)
+        .with_env("GITHUB_TOKEN", token)
         // asdf plugins often use GITHUB_API_TOKEN as the env var for GitHub API token
-        .with_env("GITHUB_API_TOKEN", &token)
+        .with_env("GITHUB_API_TOKEN", token)
 }
