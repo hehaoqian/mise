@@ -468,5 +468,5 @@ fn build_script_man(name: &str, plugin_path: &Path) -> ScriptManager {
         .with_env("MISE_SHIMS_DIR", *dirs::SHIMS)
         .with_env("GITHUB_TOKEN", &token)
         // asdf plugins often use GITHUB_API_TOKEN as the env var for GitHub API token
-        .with_env("GITHUB_API_TOKEN", token)
+        .with_env("GITHUB_API_TOKEN", &token)
 }

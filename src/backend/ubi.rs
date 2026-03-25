@@ -496,12 +496,14 @@ async fn install(
         && !api_url.contains("github.com")
         && !api_url.contains("gitlab.com")
     {
-        // GHE host: resolve token from the API URL host
+        // GHE host: resolve token using the API URL host, which handles
+        // the full priority chain (MISE_GITHUB_ENTERPRISE_TOKEN, env vars,
+        // credential_command, github_tokens.toml, gh CLI, git credential fill).
+        // The enterprise token overrides the standard github.com token.
         gh_enterprise_token = url::Url::parse(api_url)
             .ok()
             .and_then(|u| u.host_str().map(|h| h.to_string()))
             .and_then(|host| crate::github::get_token(&host));
-        // Still set the standard token first (set_token), then override with enterprise
         gh_token = crate::github::get_token("github.com");
         builder = set_token(builder, &forge, gh_token.as_deref());
         builder = builder.api_base_url(api_url.strip_suffix("/").unwrap_or(api_url));
