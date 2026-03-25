@@ -402,6 +402,12 @@ pub fn resolve_token(host: &str) -> Option<(String, TokenSource)> {
     None
 }
 
+/// Convenience wrapper around `resolve_token` that returns just the token string.
+/// Use this when you only need the token and not the source information.
+pub fn get_token(host: &str) -> Option<String> {
+    resolve_token(host).map(|(token, _)| token)
+}
+
 pub fn get_headers<U: IntoUrl>(url: U) -> HeaderMap {
     let mut headers = HeaderMap::new();
     let url = url.into_url().unwrap();

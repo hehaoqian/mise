@@ -442,6 +442,7 @@ pub static PATH_NON_PRISTINE: Lazy<Vec<PathBuf>> = Lazy::new(|| match var(&*PATH
 });
 pub static DIRENV_DIFF: Lazy<Option<String>> = Lazy::new(|| var("DIRENV_DIFF").ok());
 
+#[allow(dead_code)] // Token resolution now uses github::resolve_token() instead
 pub static GITHUB_TOKEN: Lazy<Option<String>> =
     Lazy::new(|| get_token(&["MISE_GITHUB_TOKEN", "GITHUB_API_TOKEN", "GITHUB_TOKEN"]));
 pub static MISE_GITHUB_ENTERPRISE_TOKEN: Lazy<Option<String>> =

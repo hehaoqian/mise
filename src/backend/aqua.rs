@@ -22,7 +22,7 @@ use crate::{
     cache::{CacheManager, CacheManagerBuilder},
 };
 use crate::{backend::Backend, config::Config};
-use crate::{env, file, github, minisign};
+use crate::{file, github, minisign};
 use async_trait::async_trait;
 use eyre::{ContextCompat, Result, bail, eyre};
 use indexmap::IndexSet;
@@ -1379,7 +1379,7 @@ impl AquaBackend {
                 &artifact_path,
                 &pkg.repo_owner,
                 &pkg.repo_name,
-                env::GITHUB_TOKEN.as_deref(),
+                crate::github::get_token("github.com").as_deref(),
                 signer_workflow.as_deref(),
             )
             .await

@@ -5,7 +5,7 @@ use crate::backend::static_helpers::{lookup_platform_key, try_with_v_prefix};
 use crate::cli::args::BackendArg;
 use crate::config::{Config, Settings};
 use crate::env::{
-    GITHUB_TOKEN, GITLAB_TOKEN, MISE_GITHUB_ENTERPRISE_TOKEN, MISE_GITLAB_ENTERPRISE_TOKEN,
+    GITLAB_TOKEN, MISE_GITLAB_ENTERPRISE_TOKEN,
 };
 use crate::install_context::InstallContext;
 use crate::plugins::VERSION_REGEX;
@@ -403,10 +403,14 @@ fn name_is_url(n: &str) -> bool {
     n.starts_with("http")
 }
 
-fn set_token<'a>(mut builder: UbiBuilder<'a>, forge: &ForgeType) -> UbiBuilder<'a> {
+fn set_token<'a>(
+    mut builder: UbiBuilder<'a>,
+    forge: &ForgeType,
+    token: Option<&'a str>,
+) -> UbiBuilder<'a> {
     match forge {
         ForgeType::GitHub => {
-            if let Some(token) = &*GITHUB_TOKEN {
+            if let Some(token) = token {
                 builder = builder.token(token)
             }
             builder
@@ -421,10 +425,14 @@ fn set_token<'a>(mut builder: UbiBuilder<'a>, forge: &ForgeType) -> UbiBuilder<'
     }
 }
 
-fn set_enterprise_token<'a>(mut builder: UbiBuilder<'a>, forge: &ForgeType) -> UbiBuilder<'a> {
+fn set_enterprise_token<'a>(
+    mut builder: UbiBuilder<'a>,
+    forge: &ForgeType,
+    token: Option<&'a str>,
+) -> UbiBuilder<'a> {
     match forge {
         ForgeType::GitHub => {
-            if let Some(token) = &*MISE_GITHUB_ENTERPRISE_TOKEN {
+            if let Some(token) = token {
                 builder = builder.token(token);
             }
             builder
@@ -477,14 +485,30 @@ async fn install(
         None => ForgeType::default(),
     };
     builder = builder.forge(forge.clone());
-    builder = set_token(builder, &forge);
+
+    // Resolve the GitHub token once with sufficient lifetime for the builder.
+    // For GHE hosts, resolve_token handles the full priority chain
+    // (env vars, credential_command, github_tokens.toml, gh CLI, git credential fill).
+    let gh_token;
+    let gh_enterprise_token;
 
     if let Some(api_url) = opts.get("api_url")
         && !api_url.contains("github.com")
         && !api_url.contains("gitlab.com")
     {
+        // GHE host: resolve token from the API URL host
+        gh_enterprise_token = url::Url::parse(api_url)
+            .ok()
+            .and_then(|u| u.host_str().map(|h| h.to_string()))
+            .and_then(|host| crate::github::get_token(&host));
+        // Still set the standard token first (set_token), then override with enterprise
+        gh_token = crate::github::get_token("github.com");
+        builder = set_token(builder, &forge, gh_token.as_deref());
         builder = builder.api_base_url(api_url.strip_suffix("/").unwrap_or(api_url));
-        builder = set_enterprise_token(builder, &forge);
+        builder = set_enterprise_token(builder, &forge, gh_enterprise_token.as_deref());
+    } else {
+        gh_token = crate::github::get_token("github.com");
+        builder = set_token(builder, &forge, gh_token.as_deref());
     }
 
     let mut ubi = builder.build()?;
