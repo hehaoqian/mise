@@ -232,14 +232,12 @@ impl PythonPlugin {
     ) -> eyre::Result<()> {
         // Check if URL already exists in lockfile platforms first
         let platform_key = self.get_platform_key();
-        let url = if let Some(platform_info) = tv.lock_platforms.get(&platform_key)
-            && let Some(ref url) = platform_info.url
-        {
+        let url = if let Some(url) = lockfile_url_for_platform(&tv.lock_platforms, &platform_key) {
             debug!(
                 "Using existing URL from lockfile for platform {}: {}",
                 platform_key, url
             );
-            url.clone()
+            url
         } else {
             let precompiled_versions = self.fetch_precompiled_remote_versions().await?;
             let precompile_info = precompiled_versions
@@ -840,4 +838,123 @@ fn ensure_not_windows() -> eyre::Result<()> {
 
 fn filter_freethreaded(v: &str, flavor: &Option<String>) -> bool {
     flavor.as_ref().is_some_and(|f| f.contains("freethreaded")) || !v.contains("freethreaded")
+}
+
+/// Look up an existing URL from the lockfile platforms for a given platform key.
+/// Returns `Some(url)` if the platform entry exists and has a URL, `None` otherwise.
+fn lockfile_url_for_platform(
+    lock_platforms: &BTreeMap<String, PlatformInfo>,
+    platform_key: &str,
+) -> Option<String> {
+    lock_platforms
+        .get(platform_key)
+        .and_then(|pi| pi.url.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lockfile_url_for_platform_found() {
+        let mut platforms = BTreeMap::new();
+        platforms.insert(
+            "linux-x64".to_string(),
+            PlatformInfo {
+                url: Some("https://example.com/python-3.13.5-linux-x64.tar.gz".to_string()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            lockfile_url_for_platform(&platforms, "linux-x64"),
+            Some("https://example.com/python-3.13.5-linux-x64.tar.gz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_lockfile_url_for_platform_no_entry() {
+        let platforms = BTreeMap::new();
+        assert_eq!(lockfile_url_for_platform(&platforms, "linux-x64"), None);
+    }
+
+    #[test]
+    fn test_lockfile_url_for_platform_entry_without_url() {
+        let mut platforms = BTreeMap::new();
+        platforms.insert(
+            "linux-x64".to_string(),
+            PlatformInfo {
+                url: None,
+                checksum: Some("sha256:abc123".to_string()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(lockfile_url_for_platform(&platforms, "linux-x64"), None);
+    }
+
+    #[test]
+    fn test_lockfile_url_for_platform_wrong_platform() {
+        let mut platforms = BTreeMap::new();
+        platforms.insert(
+            "macos-arm64".to_string(),
+            PlatformInfo {
+                url: Some("https://example.com/python-3.13.5-macos-arm64.tar.gz".to_string()),
+                ..Default::default()
+            },
+        );
+
+        // Looking up a different platform should return None
+        assert_eq!(lockfile_url_for_platform(&platforms, "linux-x64"), None);
+    }
+
+    #[test]
+    fn test_lockfile_url_for_platform_multiple_platforms() {
+        let mut platforms = BTreeMap::new();
+        platforms.insert(
+            "linux-x64".to_string(),
+            PlatformInfo {
+                url: Some("https://example.com/python-linux-x64.tar.gz".to_string()),
+                ..Default::default()
+            },
+        );
+        platforms.insert(
+            "macos-arm64".to_string(),
+            PlatformInfo {
+                url: Some("https://example.com/python-macos-arm64.tar.gz".to_string()),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            lockfile_url_for_platform(&platforms, "linux-x64"),
+            Some("https://example.com/python-linux-x64.tar.gz".to_string())
+        );
+        assert_eq!(
+            lockfile_url_for_platform(&platforms, "macos-arm64"),
+            Some("https://example.com/python-macos-arm64.tar.gz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_filter_freethreaded() {
+        // Non-freethreaded versions should pass
+        assert!(filter_freethreaded("3.13.5", &None));
+        assert!(filter_freethreaded(
+            "cpython-3.13.5+20250115-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+            &None
+        ));
+
+        // Freethreaded versions should be filtered out when no flavor set
+        assert!(!filter_freethreaded(
+            "cpython-3.13.5+20250115-x86_64-unknown-linux-gnu-freethreaded+pgo+lto-full.tar.zst",
+            &None
+        ));
+
+        // Freethreaded versions should pass when flavor includes freethreaded
+        assert!(filter_freethreaded(
+            "cpython-3.13.5+20250115-x86_64-unknown-linux-gnu-freethreaded+pgo+lto-full.tar.zst",
+            &Some("freethreaded+pgo+lto".to_string())
+        ));
+    }
 }
